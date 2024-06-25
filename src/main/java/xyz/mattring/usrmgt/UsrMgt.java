@@ -18,8 +18,8 @@ public class UsrMgt {
         return s == null || s.trim().isEmpty();
     }
 
-    static boolean isExpired(long millistamp, long currentTimeMillis) {
-        return (millistamp + FOUR_MINUTES) < currentTimeMillis;
+    static boolean isExpired(long lastTouchStampMillis, long currentTimeMillis, long sessionTimeoutMillis) {
+        return (lastTouchStampMillis + sessionTimeoutMillis) < currentTimeMillis;
     }
 
     static String generateLoginToken() {
@@ -99,11 +99,22 @@ public class UsrMgt {
 
     private final String pwdFile; // I think we should synchronize on pwdFile when we read/write it
     private final Map<String, Long> logins;
+    private final long sessionTimeoutMillis;
 
     public UsrMgt(final String appName, final String optionalBaseDir) {
+        this(appName, optionalBaseDir, null);
+    }
+
+    public UsrMgt(final String appName, final String optionalBaseDir, final Long optionalSessionTimeoutMillis) {
 
         if (isEmptyOrContainsWhitespace(appName)) {
             throw new IllegalArgumentException("appName must be non-empty and cannot contain whitespace");
+        }
+
+        if (optionalSessionTimeoutMillis == null || optionalSessionTimeoutMillis < FOUR_MINUTES) {
+            sessionTimeoutMillis = FOUR_MINUTES;
+        } else {
+            sessionTimeoutMillis = optionalSessionTimeoutMillis;
         }
 
         final String baseDir = isEmpty(optionalBaseDir) ? System.getProperty("user.home") : optionalBaseDir;
@@ -136,7 +147,7 @@ public class UsrMgt {
     }
 
     void removeExpiredLogins() {
-        logins.entrySet().removeIf(e -> isExpired(e.getValue(), System.currentTimeMillis()));
+        logins.entrySet().removeIf(e -> isExpired(e.getValue(), System.currentTimeMillis(), sessionTimeoutMillis));
     }
 
     void replacePlainTextPwdsWithHashAndSalt() {
@@ -197,7 +208,7 @@ public class UsrMgt {
             return false;
         }
         final Long millistamp = logins.get(token);
-        final boolean valid = millistamp != null && !isExpired(millistamp, System.currentTimeMillis());
+        final boolean valid = millistamp != null && !isExpired(millistamp, System.currentTimeMillis(), sessionTimeoutMillis);
         if (valid && renewIfValid) {
             logins.put(token, System.currentTimeMillis());
         }
